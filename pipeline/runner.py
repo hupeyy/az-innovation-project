@@ -6,6 +6,7 @@ from config import validate_env, OPENWEATHER_API_KEY, NEWS_API_KEY
 from bq.client import get_bq_client, insert_rows
 from pipeline.logger import setup_logger, log_pipeline_error
 from pipeline.notifications import send_email_alert, send_pipeline_summary
+from pipeline.sheets import log_to_sheets
 
 logger = setup_logger('az_pipeline')
 
@@ -160,6 +161,18 @@ def run_pipeline(api):
 
     finally:
         elapsed = time.time() - start_time
+        status = "FAILED" if error_count > 0 else "SUCCESS"
+
+        # Only send email on errors
         if api_name and error_count > 0:
-            # Only send summary if we got far enough to identify the API and had at least one error
             send_pipeline_summary(api_name, records_loaded, error_count, elapsed)
+
+        # Always log to Google Sheets
+        if api_name:
+            log_to_sheets(
+                api_name=api_name,
+                records_fetched=records_loaded,  # adjust if you track this separately
+                records_loaded=records_loaded,
+                errors=error_count,
+                status=status
+            )
