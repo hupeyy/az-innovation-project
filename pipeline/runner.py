@@ -1,12 +1,17 @@
-# pipeline/runner.py
 import json
 from datetime import datetime, timezone
 
-from config import validate_env, OPENWEATHER_API_KEY   # root config
+from config import validate_env, OPENWEATHER_API_KEY, NEWS_API_KEY
 from bq.client import get_bq_client, insert_rows
 from pipeline.logger import setup_logger, log_pipeline_error
 
-logger = setup_logger('weather_pipeline')
+logger = setup_logger('az_pipeline')
+
+# Map each api module to its key
+API_KEYS = {
+    'weather': OPENWEATHER_API_KEY,
+    'news':    NEWS_API_KEY,
+}
 
 def run_pipeline(api):
     # 1. Validate environment
@@ -22,18 +27,24 @@ def run_pipeline(api):
     except Exception:
         return
 
-    # 3. Fetch
-    response, fetch_error = api.fetch(OPENWEATHER_API_KEY, logger)
+    # 3. Resolve the correct API key from meta
+    meta    = api.get_api_meta()
+    api_key = API_KEYS.get(meta['api_name'])
 
-    # 3a. Request failed entirely
+    if not api_key:
+        logger.critical(f'No API key found for api_name={meta["api_name"]}')
+        return
+
+    # 4. Fetch
+    response, fetch_error = api.fetch(api_key, logger)
+
     if response is None:
         request_id = int(datetime.now(timezone.utc).timestamp())
         log_pipeline_error(bq, logger, fetch_error, request_id, stage='fetch')
         return
 
-    # 4. Log the API request — meta comes from the api module
-    meta       = api.get_api_meta()
-    request_id = int(datetime.now(timezone.utc).timestamp())
+    # 5. Log the API request
+    request_id  = int(datetime.now(timezone.utc).timestamp())
     api_request = {
         'id':               request_id,
         'source_id':        meta['source_id'],
@@ -49,7 +60,7 @@ def run_pipeline(api):
         )
         return
 
-    # 4a. Non-200 HTTP response
+    # 5a. Non-200 HTTP response
     if response.status_code != 200:
         log_pipeline_error(
             bq, logger,
@@ -59,7 +70,7 @@ def run_pipeline(api):
         )
         return
 
-    # 5. Parse JSON
+    # 6. Decode JSON
     try:
         data = response.json()
     except ValueError as e:
@@ -71,7 +82,7 @@ def run_pipeline(api):
         )
         return
 
-    # 6. Insert raw data — delegated to api module
+    # 7. Insert raw data
     raw_row = api.get_raw_row(data, request_id)
     if not insert_rows(bq, 'raw_data', [raw_row], logger):
         log_pipeline_error(
@@ -81,20 +92,27 @@ def run_pipeline(api):
             stage='insert'
         )
 
-    # 7. Parse and insert — delegated to api module
-    parsed_row, parse_error = api.parse(data, request_id, logger)
+    # 8. Parse — handles both single row and list of rows
+    parsed, parse_error = api.parse(data, request_id, logger)
 
-    if parsed_row is None:
+    if parsed is None:
         log_pipeline_error(bq, logger, parse_error, request_id, stage='parse')
         return
 
-    # table name comes from meta so the runner doesn't hardcode 'weather_data'
-    if not insert_rows(bq, meta['table'], [parsed_row], logger):
+    rows = parsed if isinstance(parsed, list) else [parsed]
+
+    if not insert_rows(bq, meta['table'], rows, logger):
         log_pipeline_error(
             bq, logger,
             f'Failed to insert into {meta["table"]}',
             request_id,
             stage='insert'
         )
+        return
 
-    logger.info(f'Pipeline completed successfully | request_id={request_id}')
+    logger.info(
+        f'Pipeline completed successfully | '
+        f'api={meta["api_name"]} | '
+        f'request_id={request_id} | '
+        f'rows={len(rows)}'
+    )

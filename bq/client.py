@@ -1,4 +1,3 @@
-# bq/client.py
 from config import GCP_PROJECT_ID, DATASET_ID
 
 from google.cloud import bigquery

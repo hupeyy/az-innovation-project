@@ -5,6 +5,7 @@ from apis.weather.parse import parse_weather
 
 def get_api_meta():
     return {
+        'api_name':  'weather',
         'source_id': weather_config.SOURCE_ID,
         'endpoint':  weather_config.ENDPOINT,
         'table':     weather_config.TABLE
