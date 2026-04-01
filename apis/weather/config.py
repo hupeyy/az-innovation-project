@@ -1,5 +1,5 @@
 SOURCE_ID = 1
-ENDPOINT  = '/data/2.5/wether'
+ENDPOINT  = '/data/2.5/weather'
 TABLE     = 'weather_data'
 BASE_URL  = 'https://api.openweathermap.org'
 
