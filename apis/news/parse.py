@@ -18,11 +18,13 @@ def parse_news(data, request_id, logger):
             rows.append({
                 'request_id':   request_id,
                 'source_name':  article['source']['name'],
-                'author':       article.get('author', 'Unknown'),
+                'author':       article.get('author'),          # nullable
                 'title':        article['title'],
+                'description':  article.get('description'),     # nullable
                 'url':          article['url'],
+                'image_url':    article.get('urlToImage'),      # nullable
                 'published_at': article['publishedAt'],
-                'content':      article.get('content', ''),
+                'content':      article.get('content'),         # nullable
             })
 
         return rows, None

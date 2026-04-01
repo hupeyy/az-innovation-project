@@ -50,6 +50,23 @@ CREATE TABLE IF NOT EXISTS weather_data (
 );
 
 -- -------------------------------------------------------------
+-- News Articles (Processed)
+-- Extracted fields from NewsAPI responses
+-- -------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS news_data (
+    id SERIAL PRIMARY KEY,
+    request_id INTEGER NOT NULL REFERENCES api_requests(id),
+    source_name VARCHAR(255) NOT NULL,      -- e.g. 'BBC News', 'CNN'
+    author VARCHAR(255),                     -- nullable, not always provided
+    title TEXT NOT NULL,
+    description TEXT,
+    url TEXT NOT NULL,
+    image_url TEXT,
+    published_at TIMESTAMP NOT NULL,
+    content TEXT
+);
+
+-- -------------------------------------------------------------
 -- Extracted Entities
 -- Generic table for parsed entities from any API source
 -- e.g. company names, categories, dates
