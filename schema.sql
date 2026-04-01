@@ -38,6 +38,9 @@ CREATE TABLE IF NOT EXISTS weather_data (
     request_id INTEGER NOT NULL REFERENCES api_requests(id),
     city_name VARCHAR(255) NOT NULL,
     country VARCHAR(10) NOT NULL,
+    units VARCHAR(20) NOT NULL,
+    latitude FLOAT NOT NULL,
+    longitude FLOAT NOT NULL,
     temp_min FLOAT NOT NULL,
     temp_max FLOAT NOT NULL,
     humidity INTEGER NOT NULL,
@@ -45,7 +48,6 @@ CREATE TABLE IF NOT EXISTS weather_data (
     sunrise TIMESTAMP NOT NULL,
     sunset TIMESTAMP NOT NULL
 );
-
 
 -- -------------------------------------------------------------
 -- Extracted Entities
