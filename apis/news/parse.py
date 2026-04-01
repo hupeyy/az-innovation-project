@@ -1,4 +1,9 @@
+import hashlib
 from datetime import datetime, timezone
+
+def generate_article_id(url):
+    """Generate a deterministic integer ID from the article URL."""
+    return int(hashlib.md5(url.encode()).hexdigest()[:15], 16)
 
 def parse_news(data, request_id, logger):
     """
@@ -16,6 +21,7 @@ def parse_news(data, request_id, logger):
         rows = []
         for article in articles:
             rows.append({
+                'id':           generate_article_id(article['url']),  # <-- ADDED
                 'request_id':   request_id,
                 'source_name':  article['source']['name'],
                 'author':       article.get('author'),          # nullable
