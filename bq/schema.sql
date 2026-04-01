@@ -9,9 +9,9 @@
 -- -------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS api_sources (
     id SERIAL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,         -- e.g. 'openweather', ''
+    name VARCHAR(255) NOT NULL,         -- e.g. 'openweather', 'newsapi'
     base_url VARCHAR(255) NOT NULL,
-    category VARCHAR(100) NOT NULL      -- e.g. 'weather', ''
+    category VARCHAR(100) NOT NULL      -- e.g. 'weather', 'news'
 );
 
 
