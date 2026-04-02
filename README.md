@@ -94,12 +94,12 @@ news_data — parsed news article records
 api_errors — errors by pipeline stage (fetch, parse, insert, etc.)
 
 ## Free Tier Limits
-BigQuery: 10GB storage, 1TB queries/month
-NewsAPI: 100 requests/day
-OpenWeather: 1,000 requests/day
-GitHub Actions: 2,000 minutes/month
-Gmail SMTP: ~500 emails/day
-Google Sheets API: generous free tier for this project's usage
+- BigQuery: 10GB storage, 1TB queries/month
+- NewsAPI: 100 requests/day
+- OpenWeather: 1,000 requests/day
+- GitHub Actions: 2,000 minutes/month
+- Gmail SMTP: ~500 emails/day
+- Google Sheets API: generous free tier for this project's usage
 
 
 # Setup Instructions
