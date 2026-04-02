@@ -4,18 +4,6 @@
 
 
 -- -------------------------------------------------------------
--- API Sources
--- Tracks each external API being ingested
--- -------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS api_sources (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,         -- e.g. 'openweather', 'newsapi'
-    base_url VARCHAR(255) NOT NULL,
-    category VARCHAR(100) NOT NULL      -- e.g. 'weather', 'news'
-);
-
-
--- -------------------------------------------------------------
 -- API Requests
 -- One row per API call made, regardless of source
 -- -------------------------------------------------------------

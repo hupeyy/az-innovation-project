@@ -1,7 +1,8 @@
 import json
 from apis.news import config as news_config
 from apis.news.fetch import fetch_news
-from apis.news.parse import parse_news
+from apis.news.parse import parse_news 
+
 
 def get_api_meta():
     return {
@@ -15,6 +16,9 @@ def fetch(api_key, logger):
     return fetch_news(api_key, logger)
 
 def parse(data, request_id, logger):
+    """
+    Delegates to the actual news parsing logic and returns its 3-value tuple.
+    """
     return parse_news(data, request_id, logger)
 
 def get_raw_row(data, request_id):

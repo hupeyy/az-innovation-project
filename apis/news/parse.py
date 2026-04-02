@@ -1,5 +1,22 @@
 import hashlib
-from datetime import datetime, timezone
+from datetime import datetime
+import time
+import random
+
+def validate_article(article):
+    """Checks if an article has the bare minimum data to be valid."""
+    # These fields are required for our schema/logic
+    required_fields = ['url', 'title', 'publishedAt']
+    
+    for field in required_fields:
+        if not article.get(field):
+            return f"Validation error: Missing required field '{field}'"
+            
+    # Check nested source structure
+    if 'source' not in article or not article['source'].get('name'):
+        return "Validation error: Article source or source name missing"
+        
+    return None
 
 def generate_article_id(url):
     """Generate a deterministic integer ID from the article URL."""
@@ -7,35 +24,51 @@ def generate_article_id(url):
 
 def parse_news(data, request_id, logger):
     """
-    NewsAPI returns a list of articles — we store one row per article.
-
-    Returns:
-        tuple: (list of rows, error_message)
+    Parses and validates the NewsAPI response.
     """
-    try:
-        articles = data['articles']
+    articles = data.get('articles')
+    if not articles:
+        return None, 'No articles key found in response'
 
-        if not articles:
-            return None, 'No articles returned in response'
-
-        rows = []
-        for article in articles:
-            rows.append({
-                'id':           generate_article_id(article['url']),  # <-- ADDED
+    valid_rows = []
+    extracted_entities = []
+    
+    for article in articles:
+        # 1. Row-level validation
+        err = validate_article(article)
+        if err:
+            logger.warning(f"Skipping invalid article: {err}")
+            continue # Skip this specific article, keep processing others
+            
+        # 2. Transformation
+        try:
+            row = {
+                'id':           generate_article_id(article['url']),
                 'request_id':   request_id,
                 'source_name':  article['source']['name'],
-                'author':       article.get('author'),          # nullable
+                'author':       article.get('author'),
                 'title':        article['title'],
-                'description':  article.get('description'),     # nullable
+                'description':  article.get('description'),
                 'url':          article['url'],
-                'image_url':    article.get('urlToImage'),      # nullable
+                'image_url':    article.get('urlToImage'),
                 'published_at': article['publishedAt'],
-                'content':      article.get('content'),         # nullable
-            })
+                'content':      article.get('content'),
+            }
+            valid_rows.append(row)
 
-        return rows, None
+            source = article.get('source', {}).get('name')
+            extracted_entities.append({
+                'id':           int(time.time() * 1000000) + random.randint(1000, 9999), # ADD THIS ID
+                'request_id':   request_id,
+                'entity_type':  'source',
+                'entity_value': str(source)
+            }) 
 
-    except KeyError as e:
-        return None, f'Missing expected field in API response: {e}'
-    except (TypeError, ValueError) as e:
-        return None, f'Data type error while parsing response: {e}'
+        except Exception as e:
+            logger.error(f"Failed to transform article: {e}")
+            continue
+
+    if not valid_rows:
+        return None, "No valid articles were found after validation"
+
+    return valid_rows, extracted_entities, None

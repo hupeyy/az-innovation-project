@@ -113,8 +113,12 @@ def run_pipeline(api):
             log_pipeline_error(bq, logger, 'Failed to insert raw_data', request_id, stage='insert')
             # Don't return — raw data failure shouldn't stop pipeline
 
-        # 8. Parse — handles both single row and list of rows
-        parsed, parse_error = api.parse(data, request_id, logger)
+        # 8. Parse — handles (parsed_rows, entities, parse_error)
+        result = api.parse(data, request_id, logger)
+        
+        # Unpack based on whether API returns entities or not
+        # If your weather API doesn't extract entities, it can return None for that index
+        parsed, entities, parse_error = result if len(result) == 3 else (result[0], None, result[1])
 
         if parsed is None:
             log_pipeline_error(bq, logger, parse_error, request_id, stage='parse')
@@ -126,6 +130,7 @@ def run_pipeline(api):
             error_count += 1
             return
 
+        # Handle list vs single row for main table
         rows = parsed if isinstance(parsed, list) else [parsed]
 
         if not insert_rows(bq, meta['table'], rows, logger):
@@ -138,6 +143,17 @@ def run_pipeline(api):
             )
             error_count += 1
             return
+
+        if entities:
+            entity_rows = entities if isinstance(entities, list) else [entities]
+            logger.info(f"Attempting to insert {len(entity_rows)} entities.")
+            
+            # Change this part to be more verbose:
+            success = insert_rows(bq, 'extracted_entities', entity_rows, logger)
+            if not success:
+                logger.error(f"CRITICAL: Failed to insert entities for request {request_id}. Check BigQuery logs!")
+            else:
+                logger.info(f"Successfully inserted {len(entity_rows)} entities") 
 
         # Success!
         records_loaded = len(rows)
