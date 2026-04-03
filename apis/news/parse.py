@@ -5,14 +5,12 @@ import random
 
 def validate_article(article):
     """Checks if an article has the bare minimum data to be valid."""
-    # These fields are required for our schema/logic
     required_fields = ['url', 'title', 'publishedAt']
     
     for field in required_fields:
         if not article.get(field):
             return f"Validation error: Missing required field '{field}'"
             
-    # Check nested source structure
     if 'source' not in article or not article['source'].get('name'):
         return "Validation error: Article source or source name missing"
         
@@ -25,22 +23,27 @@ def generate_article_id(url):
 def parse_news(data, request_id, logger):
     """
     Parses and validates the NewsAPI response.
+    Always returns a 3-tuple: (rows, entities, error)
     """
+    # 1. Guard against None or non-dict input
+    if not isinstance(data, dict):
+        return None, None, f'Invalid response: expected dict, got {type(data).__name__}'
+
     articles = data.get('articles')
     if not articles:
-        return None, 'No articles key found in response'
+        return None, None, 'No articles key found in response'
 
     valid_rows = []
     extracted_entities = []
     
     for article in articles:
-        # 1. Row-level validation
+        # 2. Row-level validation
         err = validate_article(article)
         if err:
             logger.warning(f"Skipping invalid article: {err}")
-            continue # Skip this specific article, keep processing others
+            continue
             
-        # 2. Transformation
+        # 3. Transformation
         try:
             row = {
                 'id':           generate_article_id(article['url']),
@@ -58,17 +61,17 @@ def parse_news(data, request_id, logger):
 
             source = article.get('source', {}).get('name')
             extracted_entities.append({
-                'id':           int(time.time() * 1000000) + random.randint(1000, 9999), # ADD THIS ID
+                'id':           int(time.time() * 1000000) + random.randint(1000, 9999),
                 'request_id':   request_id,
                 'entity_type':  'source',
                 'entity_value': str(source)
-            }) 
+            })
 
         except Exception as e:
             logger.error(f"Failed to transform article: {e}")
             continue
 
     if not valid_rows:
-        return None, "No valid articles were found after validation"
+        return None, None, 'No valid articles were found after validation'
 
     return valid_rows, extracted_entities, None

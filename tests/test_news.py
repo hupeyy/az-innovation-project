@@ -149,6 +149,10 @@ class TestNewsApiMeta:
         meta = get_api_meta()
         assert 'table' in meta
 
+    def test_meta_contains_api_name(self):
+        meta = get_api_meta()
+        assert 'api_name' in meta
+
     def test_source_id_is_correct(self):
         meta = get_api_meta()
         assert meta['source_id'] == 2
@@ -160,6 +164,10 @@ class TestNewsApiMeta:
     def test_table_is_correct(self):
         meta = get_api_meta()
         assert meta['table'] == 'news_data'
+
+    def test_api_name_is_correct(self):
+        meta = get_api_meta()
+        assert meta['api_name'] == 'news'
 
 
 # ===================================================================
@@ -174,6 +182,10 @@ class TestNewsRawRow:
     def test_raw_row_contains_request_id(self):
         raw_row = get_raw_row(VALID_NEWS_RESPONSE, request_id=999)
         assert raw_row['request_id'] == 999
+
+    def test_raw_row_id_matches_request_id(self):
+        raw_row = get_raw_row(VALID_NEWS_RESPONSE, request_id=999)
+        assert raw_row['id'] == 999
 
     def test_raw_data_is_valid_json_string(self):
         raw_row = get_raw_row(VALID_NEWS_RESPONSE, request_id=999)
@@ -276,57 +288,86 @@ class TestParseNews:
     # --- Happy path ---
 
     def test_valid_response_returns_correct_row_count(self):
-        rows, error = parse_news(VALID_NEWS_RESPONSE, request_id=1, logger=make_mock_logger())
+        rows, entities, error = parse_news(VALID_NEWS_RESPONSE, request_id=1, logger=make_mock_logger())
         assert error is None
         assert len(rows) == 2
 
     def test_valid_response_returns_correct_fields(self):
-        rows, error = parse_news(VALID_NEWS_RESPONSE, request_id=1, logger=make_mock_logger())
+        rows, entities, error = parse_news(VALID_NEWS_RESPONSE, request_id=1, logger=make_mock_logger())
         assert error is None
         for i, row in enumerate(rows):
             for field, expected in EXPECTED_NEWS_ROWS[i].items():
                 assert row[field] == expected, f'Mismatch on article {i}, field: {field}'
 
     def test_request_id_is_attached_to_every_row(self):
-        rows, _ = parse_news(VALID_NEWS_RESPONSE, request_id=999, logger=make_mock_logger())
+        rows, _, error = parse_news(VALID_NEWS_RESPONSE, request_id=999, logger=make_mock_logger())
+        assert error is None
         for row in rows:
             assert row['request_id'] == 999
 
     def test_source_name_extracted_from_nested_object(self):
-        rows, _ = parse_news(VALID_NEWS_RESPONSE, request_id=1, logger=make_mock_logger())
+        rows, _, _ = parse_news(VALID_NEWS_RESPONSE, request_id=1, logger=make_mock_logger())
         assert rows[0]['source_name'] == 'BBC News'
         assert rows[1]['source_name'] == 'CNN'
 
     def test_image_url_maps_from_urlToImage(self):
-        rows, _ = parse_news(VALID_NEWS_RESPONSE, request_id=1, logger=make_mock_logger())
+        rows, _, _ = parse_news(VALID_NEWS_RESPONSE, request_id=1, logger=make_mock_logger())
         assert rows[0]['image_url'] == VALID_NEWS_RESPONSE['articles'][0]['urlToImage']
+
+    # --- Entities ---
+
+    def test_returns_entities_for_each_article(self):
+        _, entities, error = parse_news(VALID_NEWS_RESPONSE, request_id=1, logger=make_mock_logger())
+        assert error    is None
+        assert len(entities) == 2
+
+    def test_entity_type_is_source(self):
+        _, entities, _ = parse_news(VALID_NEWS_RESPONSE, request_id=1, logger=make_mock_logger())
+        for entity in entities:
+            assert entity['entity_type'] == 'source'
+
+    def test_entity_values_match_source_names(self):
+        _, entities, _ = parse_news(VALID_NEWS_RESPONSE, request_id=1, logger=make_mock_logger())
+        values = [e['entity_value'] for e in entities]
+        assert 'BBC News' in values
+        assert 'CNN'      in values
+
+    def test_entity_has_request_id(self):
+        _, entities, _ = parse_news(VALID_NEWS_RESPONSE, request_id=999, logger=make_mock_logger())
+        for entity in entities:
+            assert entity['request_id'] == 999
+
+    def test_entity_has_id_field(self):
+        _, entities, _ = parse_news(VALID_NEWS_RESPONSE, request_id=1, logger=make_mock_logger())
+        for entity in entities:
+            assert 'id' in entity
 
     # --- Nullable fields ---
 
     def test_missing_author_returns_none(self):
-        data        = remove_article_key(VALID_NEWS_RESPONSE, 'author')
-        rows, error = parse_news(data, request_id=1, logger=make_mock_logger())
+        data               = remove_article_key(VALID_NEWS_RESPONSE, 'author')
+        rows, _, error     = parse_news(data, request_id=1, logger=make_mock_logger())
         assert error is None
         for row in rows:
             assert row['author'] is None
 
     def test_missing_description_returns_none(self):
-        data        = remove_article_key(VALID_NEWS_RESPONSE, 'description')
-        rows, error = parse_news(data, request_id=1, logger=make_mock_logger())
+        data               = remove_article_key(VALID_NEWS_RESPONSE, 'description')
+        rows, _, error     = parse_news(data, request_id=1, logger=make_mock_logger())
         assert error is None
         for row in rows:
             assert row['description'] is None
 
     def test_missing_image_url_returns_none(self):
-        data        = remove_article_key(VALID_NEWS_RESPONSE, 'urlToImage')
-        rows, error = parse_news(data, request_id=1, logger=make_mock_logger())
+        data               = remove_article_key(VALID_NEWS_RESPONSE, 'urlToImage')
+        rows, _, error     = parse_news(data, request_id=1, logger=make_mock_logger())
         assert error is None
         for row in rows:
             assert row['image_url'] is None
 
     def test_missing_content_returns_none(self):
-        data        = remove_article_key(VALID_NEWS_RESPONSE, 'content')
-        rows, error = parse_news(data, request_id=1, logger=make_mock_logger())
+        data               = remove_article_key(VALID_NEWS_RESPONSE, 'content')
+        rows, _, error     = parse_news(data, request_id=1, logger=make_mock_logger())
         assert error is None
         for row in rows:
             assert row['content'] is None
@@ -334,68 +375,74 @@ class TestParseNews:
     # --- Required fields ---
 
     def test_missing_articles_key_returns_error(self):
-        bad_data    = remove_key(VALID_NEWS_RESPONSE, 'articles')
-        rows, error = parse_news(bad_data, request_id=1, logger=make_mock_logger())
-        assert rows  is None
-        assert error is not None
+        bad_data              = remove_key(VALID_NEWS_RESPONSE, 'articles')
+        rows, entities, error = parse_news(bad_data, request_id=1, logger=make_mock_logger())
+        assert rows   is None
+        assert error  is not None
 
     def test_empty_articles_returns_error(self):
-        data              = copy.deepcopy(VALID_NEWS_RESPONSE)
-        data['articles']  = []
-        rows, error       = parse_news(data, request_id=1, logger=make_mock_logger())
-        assert rows  is None
-        assert error is not None
+        data                  = copy.deepcopy(VALID_NEWS_RESPONSE)
+        data['articles']      = []
+        rows, entities, error = parse_news(data, request_id=1, logger=make_mock_logger())
+        assert rows   is None
+        assert error  is not None
 
     def test_missing_source_returns_error(self):
-        bad_data    = remove_article_key(VALID_NEWS_RESPONSE, 'source')
-        rows, error = parse_news(bad_data, request_id=1, logger=make_mock_logger())
-        assert rows  is None
-        assert error is not None
+        bad_data              = remove_article_key(VALID_NEWS_RESPONSE, 'source')
+        rows, entities, error = parse_news(bad_data, request_id=1, logger=make_mock_logger())
+        assert rows   is None
+        assert error  is not None
 
     def test_missing_source_name_returns_error(self):
-        bad_data    = remove_nested_article_key(VALID_NEWS_RESPONSE, ['source', 'name'])
-        rows, error = parse_news(bad_data, request_id=1, logger=make_mock_logger())
-        assert rows  is None
-        assert error is not None
+        bad_data              = remove_nested_article_key(VALID_NEWS_RESPONSE, ['source', 'name'])
+        rows, entities, error = parse_news(bad_data, request_id=1, logger=make_mock_logger())
+        assert rows   is None
+        assert error  is not None
 
     def test_missing_title_returns_error(self):
-        bad_data    = remove_article_key(VALID_NEWS_RESPONSE, 'title')
-        rows, error = parse_news(bad_data, request_id=1, logger=make_mock_logger())
-        assert rows  is None
-        assert error is not None
+        bad_data              = remove_article_key(VALID_NEWS_RESPONSE, 'title')
+        rows, entities, error = parse_news(bad_data, request_id=1, logger=make_mock_logger())
+        assert rows   is None
+        assert error  is not None
 
     def test_missing_url_returns_error(self):
-        bad_data    = remove_article_key(VALID_NEWS_RESPONSE, 'url')
-        rows, error = parse_news(bad_data, request_id=1, logger=make_mock_logger())
-        assert rows  is None
-        assert error is not None
+        bad_data              = remove_article_key(VALID_NEWS_RESPONSE, 'url')
+        rows, entities, error = parse_news(bad_data, request_id=1, logger=make_mock_logger())
+        assert rows   is None
+        assert error  is not None
 
     def test_missing_published_at_returns_error(self):
-        bad_data    = remove_article_key(VALID_NEWS_RESPONSE, 'publishedAt')
-        rows, error = parse_news(bad_data, request_id=1, logger=make_mock_logger())
-        assert rows  is None
-        assert error is not None
+        bad_data              = remove_article_key(VALID_NEWS_RESPONSE, 'publishedAt')
+        rows, entities, error = parse_news(bad_data, request_id=1, logger=make_mock_logger())
+        assert rows   is None
+        assert error  is not None
 
     # --- Bad types ---
 
     def test_none_response_returns_error(self):
-        rows, error = parse_news(None, request_id=1, logger=make_mock_logger())
-        assert rows  is None
-        assert error is not None
+        rows, entities, error = parse_news(None, request_id=1, logger=make_mock_logger())
+        assert rows   is None
+        assert error  is not None
 
     def test_empty_response_returns_error(self):
-        rows, error = parse_news({}, request_id=1, logger=make_mock_logger())
-        assert rows  is None
-        assert error is not None
+        rows, entities, error = parse_news({}, request_id=1, logger=make_mock_logger())
+        assert rows   is None
+        assert error  is not None
 
     # --- Single article ---
 
     def test_single_article_returns_one_row(self):
         data             = copy.deepcopy(VALID_NEWS_RESPONSE)
         data['articles'] = [data['articles'][0]]
-        rows, error      = parse_news(data, request_id=1, logger=make_mock_logger())
+        rows, _, error   = parse_news(data, request_id=1, logger=make_mock_logger())
         assert error is None
         assert len(rows) == 1
+
+    def test_single_article_returns_one_entity(self):
+        data             = copy.deepcopy(VALID_NEWS_RESPONSE)
+        data['articles'] = [data['articles'][0]]
+        _, entities, _   = parse_news(data, request_id=1, logger=make_mock_logger())
+        assert len(entities) == 1
 
 
 # ===================================================================
@@ -593,3 +640,29 @@ class TestNewsPipeline:
             table, rows = call_args.args
             if 'news_data' in table:
                 assert len(rows) == 2
+
+    @patch('apis.news.fetch.requests.get')
+    @patch('pipeline.runner.get_bq_client')
+    def test_entities_inserted_for_each_article(self, mock_get_client, mock_get):
+        mock_get.return_value        = make_mock_response(200)
+        client                       = make_bq_client()
+        mock_get_client.return_value = client
+
+        run_pipeline(news_api)
+
+        tables = get_inserted_tables(client)
+        assert any('extracted_entities' in t for t in tables)
+
+    @patch('apis.news.fetch.requests.get')
+    @patch('pipeline.runner.get_bq_client')
+    def test_entities_inserted_after_news_data(self, mock_get_client, mock_get):
+        mock_get.return_value        = make_mock_response(200)
+        client                       = make_bq_client()
+        mock_get_client.return_value = client
+
+        run_pipeline(news_api)
+
+        tables       = get_inserted_tables(client)
+        news_index   = next(i for i, t in enumerate(tables) if 'news_data'          in t)
+        entity_index = next(i for i, t in enumerate(tables) if 'extracted_entities' in t)
+        assert news_index < entity_index

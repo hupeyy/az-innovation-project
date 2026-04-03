@@ -32,6 +32,11 @@ def parse_weather(data, request_id, logger):
     Parses and validates the weather API response.
     Returns: (row, [entities], error_message)
     """
+
+    # Guard against None or non-dict input
+    if not isinstance(data, dict):
+        return None, None, f'Invalid response: expected dict, got {type(data).__name__}'
+
     # 1. Validation
     validation_error = validate_weather(data)
     if validation_error:

@@ -8,6 +8,7 @@ os.environ['GCP_PROJECT_ID']      = 'test_project'
 
 import pytest
 import json
+import copy
 import logging
 from unittest.mock import MagicMock, patch
 from datetime import datetime, timezone
@@ -20,6 +21,7 @@ from apis.weather.pipeline import get_api_meta, get_raw_row
 import apis.weather.pipeline as weather_api
 from pipeline.runner       import run_pipeline
 from bq.client             import insert_rows, get_bq_client
+
 
 # -------------------------------------------------------------------
 # Shared Fixtures & Helpers
@@ -63,29 +65,33 @@ EXPECTED_WEATHER_ROW = {
     'sunset':     datetime.fromtimestamp(1717027200, tz=timezone.utc).isoformat(),
 }
 
+
 def make_mock_response(status_code=200, json_data=None, text='', elapsed_ms=120):
-    mock_resp                       = MagicMock()
-    mock_resp.status_code           = status_code
-    mock_resp.text                  = text
-    mock_resp.json.return_value     = json_data if json_data is not None else VALID_WEATHER_RESPONSE
-    mock_elapsed                    = MagicMock()
+    mock_resp                               = MagicMock()
+    mock_resp.status_code                   = status_code
+    mock_resp.text                          = text
+    mock_resp.json.return_value             = json_data if json_data is not None else VALID_WEATHER_RESPONSE
+    mock_elapsed                            = MagicMock()
     mock_elapsed.total_seconds.return_value = elapsed_ms / 1000
-    mock_resp.elapsed               = mock_elapsed
+    mock_resp.elapsed                       = mock_elapsed
     return mock_resp
 
+
 def make_bq_client(insert_return=None):
-    client                          = MagicMock()
+    client                               = MagicMock()
     client.insert_rows_json.return_value = insert_return or []
     return client
+
 
 def make_mock_logger():
     return MagicMock()
 
+
 def remove_key(d, key):
     return {k: v for k, v in d.items() if k != key}
 
+
 def nested_remove_key(data, path):
-    import copy
     d   = copy.deepcopy(data)
     ref = d
     for key in path[:-1]:
@@ -93,8 +99,8 @@ def nested_remove_key(data, path):
     del ref[path[-1]]
     return d
 
+
 def get_inserted_tables(client):
-    """Extract table names from all BQ insert calls."""
     return [
         call_args.args[0]
         for call_args in client.insert_rows_json.call_args_list
@@ -122,6 +128,10 @@ class TestWeatherApiMeta:
         meta = get_api_meta()
         assert 'table' in meta
 
+    def test_meta_contains_api_name(self):
+        meta = get_api_meta()
+        assert 'api_name' in meta
+
     def test_source_id_is_correct(self):
         meta = get_api_meta()
         assert meta['source_id'] == 1
@@ -133,6 +143,10 @@ class TestWeatherApiMeta:
     def test_table_is_correct(self):
         meta = get_api_meta()
         assert meta['table'] == 'weather_data'
+
+    def test_api_name_is_correct(self):
+        meta = get_api_meta()
+        assert meta['api_name'] == 'weather'
 
 
 # ===================================================================
@@ -154,7 +168,6 @@ class TestWeatherRawRow:
 
     def test_raw_data_is_valid_json_string(self):
         raw_row = get_raw_row(VALID_WEATHER_RESPONSE, request_id=999)
-        # Should be a string that can be parsed back to a dict
         parsed  = json.loads(raw_row['raw_data'])
         assert parsed == VALID_WEATHER_RESPONSE
 
@@ -163,6 +176,18 @@ class TestWeatherRawRow:
         parsed  = json.loads(raw_row['raw_data'])
         for key in VALID_WEATHER_RESPONSE:
             assert key in parsed
+
+    def test_raw_data_preserves_nested_sys_fields(self):
+        raw_row = get_raw_row(VALID_WEATHER_RESPONSE, request_id=999)
+        parsed  = json.loads(raw_row['raw_data'])
+        for key in VALID_WEATHER_RESPONSE['sys']:
+            assert key in parsed['sys']
+
+    def test_raw_data_preserves_nested_main_fields(self):
+        raw_row = get_raw_row(VALID_WEATHER_RESPONSE, request_id=999)
+        parsed  = json.loads(raw_row['raw_data'])
+        for key in VALID_WEATHER_RESPONSE['main']:
+            assert key in parsed['main']
 
 
 # ===================================================================
@@ -173,31 +198,36 @@ class TestFetchWeather:
 
     @patch('apis.weather.fetch.requests.get')
     def test_returns_response_on_success(self, mock_get):
-        mock_get.return_value   = make_mock_response(200)
-        response, error         = fetch_weather('test_key', make_mock_logger())
-        assert response         is not None
-        assert error            is None
+        mock_get.return_value = make_mock_response(200)
+        response, error       = fetch_weather('test_key', make_mock_logger())
+        assert response       is not None
+        assert error          is None
+
+    @patch('apis.weather.fetch.requests.get')
+    def test_returns_no_error_on_success(self, mock_get):
+        mock_get.return_value = make_mock_response(200)
+        response, error       = fetch_weather('test_key', make_mock_logger())
+        assert error          is None
 
     @patch('apis.weather.fetch.requests.get')
     def test_returns_response_on_401(self, mock_get):
-        """fetch() itself succeeds — HTTP errors are handled by the runner."""
-        mock_get.return_value   = make_mock_response(401, text='Unauthorized')
-        response, error         = fetch_weather('bad_key', make_mock_logger())
-        assert response         is not None
+        mock_get.return_value = make_mock_response(401, text='Unauthorized')
+        response, error       = fetch_weather('bad_key', make_mock_logger())
+        assert response       is not None
         assert response.status_code == 401
 
     @patch('apis.weather.fetch.requests.get')
     def test_returns_response_on_429(self, mock_get):
-        mock_get.return_value   = make_mock_response(429, text='Too Many Requests')
-        response, error         = fetch_weather('test_key', make_mock_logger())
-        assert response         is not None
+        mock_get.return_value = make_mock_response(429, text='Too Many Requests')
+        response, error       = fetch_weather('test_key', make_mock_logger())
+        assert response       is not None
         assert response.status_code == 429
 
     @patch('apis.weather.fetch.requests.get')
     def test_returns_response_on_500(self, mock_get):
-        mock_get.return_value   = make_mock_response(500, text='Server Error')
-        response, error         = fetch_weather('test_key', make_mock_logger())
-        assert response         is not None
+        mock_get.return_value = make_mock_response(500, text='Server Error')
+        response, error       = fetch_weather('test_key', make_mock_logger())
+        assert response       is not None
         assert response.status_code == 500
 
     @patch('apis.weather.fetch.requests.get', side_effect=ConnectionError('No network'))
@@ -221,32 +251,32 @@ class TestFetchWeather:
     @patch('apis.weather.fetch.requests.get')
     def test_correct_coordinates_sent(self, mock_get):
         import apis.weather.config as config
-        mock_get.return_value   = make_mock_response(200)
+        mock_get.return_value = make_mock_response(200)
         fetch_weather('test_key', make_mock_logger())
-        sent_params             = mock_get.call_args.kwargs['params']
+        sent_params           = mock_get.call_args.kwargs['params']
         assert sent_params['lat'] == config.ORLANDO_LAT
         assert sent_params['lon'] == config.ORLANDO_LON
 
     @patch('apis.weather.fetch.requests.get')
     def test_correct_units_sent(self, mock_get):
         import apis.weather.config as config
-        mock_get.return_value   = make_mock_response(200)
+        mock_get.return_value = make_mock_response(200)
         fetch_weather('test_key', make_mock_logger())
-        sent_params             = mock_get.call_args.kwargs['params']
+        sent_params           = mock_get.call_args.kwargs['params']
         assert sent_params['units'] == config.UNITS
 
     @patch('apis.weather.fetch.requests.get')
     def test_api_key_sent(self, mock_get):
-        mock_get.return_value   = make_mock_response(200)
+        mock_get.return_value = make_mock_response(200)
         fetch_weather('test_key', make_mock_logger())
-        sent_params             = mock_get.call_args.kwargs['params']
+        sent_params           = mock_get.call_args.kwargs['params']
         assert sent_params['appid'] == 'test_key'
 
     @patch('apis.weather.fetch.requests.get')
     def test_timeout_is_enforced(self, mock_get):
-        mock_get.return_value   = make_mock_response(200)
+        mock_get.return_value = make_mock_response(200)
         fetch_weather('test_key', make_mock_logger())
-        sent_kwargs             = mock_get.call_args.kwargs
+        sent_kwargs           = mock_get.call_args.kwargs
         assert 'timeout' in sent_kwargs
         assert sent_kwargs['timeout'] > 0
 
@@ -257,117 +287,139 @@ class TestFetchWeather:
 class TestParseWeather:
     """Tests for parse_weather() in isolation."""
 
+    # --- Happy path ---
+
     def test_valid_response_returns_correct_row(self):
-        weather_row, error = parse_weather(VALID_WEATHER_RESPONSE, request_id=1, logger=make_mock_logger())
+        row, _, error = parse_weather(VALID_WEATHER_RESPONSE, request_id=1, logger=make_mock_logger())
         assert error is None
         for field, expected in EXPECTED_WEATHER_ROW.items():
-            assert weather_row[field] == expected, f'Mismatch on field: {field}'
+            assert row[field] == expected, f'Mismatch on field: {field}'
 
     def test_request_id_is_attached(self):
-        weather_row, _ = parse_weather(VALID_WEATHER_RESPONSE, request_id=999, logger=make_mock_logger())
-        assert weather_row['request_id'] == 999
+        row, _, _ = parse_weather(VALID_WEATHER_RESPONSE, request_id=999, logger=make_mock_logger())
+        assert row['request_id'] == 999
 
     def test_sunrise_is_utc_isoformat(self):
-        weather_row, _ = parse_weather(VALID_WEATHER_RESPONSE, request_id=1, logger=make_mock_logger())
-        assert weather_row['sunrise'].endswith('+00:00')
+        row, _, _ = parse_weather(VALID_WEATHER_RESPONSE, request_id=1, logger=make_mock_logger())
+        assert row['sunrise'].endswith('+00:00')
 
     def test_sunset_is_utc_isoformat(self):
-        weather_row, _ = parse_weather(VALID_WEATHER_RESPONSE, request_id=1, logger=make_mock_logger())
-        assert weather_row['sunset'].endswith('+00:00')
+        row, _, _ = parse_weather(VALID_WEATHER_RESPONSE, request_id=1, logger=make_mock_logger())
+        assert row['sunset'].endswith('+00:00')
+
+    def test_latitude_is_float(self):
+        row, _, _ = parse_weather(VALID_WEATHER_RESPONSE, request_id=1, logger=make_mock_logger())
+        assert isinstance(row['latitude'], float)
+
+    def test_longitude_is_float(self):
+        row, _, _ = parse_weather(VALID_WEATHER_RESPONSE, request_id=1, logger=make_mock_logger())
+        assert isinstance(row['longitude'], float)
+
+    def test_humidity_is_int(self):
+        row, _, _ = parse_weather(VALID_WEATHER_RESPONSE, request_id=1, logger=make_mock_logger())
+        assert isinstance(row['humidity'], int)
+
+    def test_city_name_is_correct(self):
+        row, _, _ = parse_weather(VALID_WEATHER_RESPONSE, request_id=1, logger=make_mock_logger())
+        assert row['city_name'] == 'Orlando'
+
+    def test_country_is_correct(self):
+        row, _, _ = parse_weather(VALID_WEATHER_RESPONSE, request_id=1, logger=make_mock_logger())
+        assert row['country'] == 'US'
 
     # --- Missing top-level fields ---
 
     def test_missing_city_name_returns_error(self):
-        bad_data           = remove_key(VALID_WEATHER_RESPONSE, 'name')
-        weather_row, error = parse_weather(bad_data, request_id=1, logger=make_mock_logger())
-        assert weather_row is None
-        assert error       is not None
+        bad_data      = remove_key(VALID_WEATHER_RESPONSE, 'name')
+        row, _, error = parse_weather(bad_data, request_id=1, logger=make_mock_logger())
+        assert row    is None
+        assert error  is not None
 
     def test_missing_id_returns_error(self):
-        bad_data           = remove_key(VALID_WEATHER_RESPONSE, 'id')
-        weather_row, error = parse_weather(bad_data, request_id=1, logger=make_mock_logger())
-        assert weather_row is None
-        assert error       is not None
+        bad_data      = remove_key(VALID_WEATHER_RESPONSE, 'id')
+        row, _, error = parse_weather(bad_data, request_id=1, logger=make_mock_logger())
+        assert row    is None
+        assert error  is not None
 
     def test_missing_sys_returns_error(self):
-        bad_data           = remove_key(VALID_WEATHER_RESPONSE, 'sys')
-        weather_row, error = parse_weather(bad_data, request_id=1, logger=make_mock_logger())
-        assert weather_row is None
-        assert error       is not None
+        bad_data      = remove_key(VALID_WEATHER_RESPONSE, 'sys')
+        row, _, error = parse_weather(bad_data, request_id=1, logger=make_mock_logger())
+        assert row    is None
+        assert error  is not None
 
     def test_missing_coord_returns_error(self):
-        bad_data           = remove_key(VALID_WEATHER_RESPONSE, 'coord')
-        weather_row, error = parse_weather(bad_data, request_id=1, logger=make_mock_logger())
-        assert weather_row is None
-        assert error       is not None
+        bad_data      = remove_key(VALID_WEATHER_RESPONSE, 'coord')
+        row, _, error = parse_weather(bad_data, request_id=1, logger=make_mock_logger())
+        assert row    is None
+        assert error  is not None
 
     def test_missing_main_returns_error(self):
-        bad_data           = remove_key(VALID_WEATHER_RESPONSE, 'main')
-        weather_row, error = parse_weather(bad_data, request_id=1, logger=make_mock_logger())
-        assert weather_row is None
-        assert error       is not None
+        bad_data      = remove_key(VALID_WEATHER_RESPONSE, 'main')
+        row, _, error = parse_weather(bad_data, request_id=1, logger=make_mock_logger())
+        assert row    is None
+        assert error  is not None
 
     def test_missing_wind_returns_error(self):
-        bad_data           = remove_key(VALID_WEATHER_RESPONSE, 'wind')
-        weather_row, error = parse_weather(bad_data, request_id=1, logger=make_mock_logger())
-        assert weather_row is None
-        assert error       is not None
+        bad_data      = remove_key(VALID_WEATHER_RESPONSE, 'wind')
+        row, _, error = parse_weather(bad_data, request_id=1, logger=make_mock_logger())
+        assert row    is None
+        assert error  is not None
 
     # --- Missing nested fields ---
 
     def test_missing_country_returns_error(self):
-        bad_data           = nested_remove_key(VALID_WEATHER_RESPONSE, ['sys', 'country'])
-        weather_row, error = parse_weather(bad_data, request_id=1, logger=make_mock_logger())
-        assert weather_row is None
-        assert error       is not None
+        bad_data      = nested_remove_key(VALID_WEATHER_RESPONSE, ['sys', 'country'])
+        row, _, error = parse_weather(bad_data, request_id=1, logger=make_mock_logger())
+        assert row    is None
+        assert error  is not None
 
     def test_missing_sunrise_returns_error(self):
-        bad_data           = nested_remove_key(VALID_WEATHER_RESPONSE, ['sys', 'sunrise'])
-        weather_row, error = parse_weather(bad_data, request_id=1, logger=make_mock_logger())
-        assert weather_row is None
-        assert error       is not None
+        bad_data      = nested_remove_key(VALID_WEATHER_RESPONSE, ['sys', 'sunrise'])
+        row, _, error = parse_weather(bad_data, request_id=1, logger=make_mock_logger())
+        assert row    is None
+        assert error  is not None
 
     def test_missing_sunset_returns_error(self):
-        bad_data           = nested_remove_key(VALID_WEATHER_RESPONSE, ['sys', 'sunset'])
-        weather_row, error = parse_weather(bad_data, request_id=1, logger=make_mock_logger())
-        assert weather_row is None
-        assert error       is not None
+        bad_data      = nested_remove_key(VALID_WEATHER_RESPONSE, ['sys', 'sunset'])
+        row, _, error = parse_weather(bad_data, request_id=1, logger=make_mock_logger())
+        assert row    is None
+        assert error  is not None
 
     def test_missing_temp_min_returns_error(self):
-        bad_data           = nested_remove_key(VALID_WEATHER_RESPONSE, ['main', 'temp_min'])
-        weather_row, error = parse_weather(bad_data, request_id=1, logger=make_mock_logger())
-        assert weather_row is None
-        assert error       is not None
+        bad_data      = nested_remove_key(VALID_WEATHER_RESPONSE, ['main', 'temp_min'])
+        row, _, error = parse_weather(bad_data, request_id=1, logger=make_mock_logger())
+        assert row    is None
+        assert error  is not None
 
     def test_missing_temp_max_returns_error(self):
-        bad_data           = nested_remove_key(VALID_WEATHER_RESPONSE, ['main', 'temp_max'])
-        weather_row, error = parse_weather(bad_data, request_id=1, logger=make_mock_logger())
-        assert weather_row is None
-        assert error       is not None
+        bad_data      = nested_remove_key(VALID_WEATHER_RESPONSE, ['main', 'temp_max'])
+        row, _, error = parse_weather(bad_data, request_id=1, logger=make_mock_logger())
+        assert row    is None
+        assert error  is not None
 
     def test_missing_humidity_returns_error(self):
-        bad_data           = nested_remove_key(VALID_WEATHER_RESPONSE, ['main', 'humidity'])
-        weather_row, error = parse_weather(bad_data, request_id=1, logger=make_mock_logger())
-        assert weather_row is None
-        assert error       is not None
+        bad_data      = nested_remove_key(VALID_WEATHER_RESPONSE, ['main', 'humidity'])
+        row, _, error = parse_weather(bad_data, request_id=1, logger=make_mock_logger())
+        assert row    is None
+        assert error  is not None
 
     def test_missing_wind_speed_returns_error(self):
-        bad_data           = nested_remove_key(VALID_WEATHER_RESPONSE, ['wind', 'speed'])
-        weather_row, error = parse_weather(bad_data, request_id=1, logger=make_mock_logger())
-        assert weather_row is None
-        assert error       is not None
+        bad_data      = nested_remove_key(VALID_WEATHER_RESPONSE, ['wind', 'speed'])
+        row, _, error = parse_weather(bad_data, request_id=1, logger=make_mock_logger())
+        assert row    is None
+        assert error  is not None
 
     # --- Bad types ---
 
     def test_none_response_returns_error(self):
-        weather_row, error = parse_weather(None, request_id=1, logger=make_mock_logger())
-        assert weather_row is None
-        assert error       is not None
+        row, _, error = parse_weather(None, request_id=1, logger=make_mock_logger())
+        assert row    is None
+        assert error  is not None
 
     def test_empty_response_returns_error(self):
-        weather_row, error = parse_weather({}, request_id=1, logger=make_mock_logger())
-        assert weather_row is None
-        assert error       is not None
+        row, _, error = parse_weather({}, request_id=1, logger=make_mock_logger())
+        assert row    is None
+        assert error  is not None
 
 
 # ===================================================================
@@ -396,7 +448,6 @@ class TestWeatherPipeline:
     @patch('apis.weather.fetch.requests.get')
     @patch('pipeline.runner.get_bq_client')
     def test_correct_table_used_from_meta(self, mock_get_client, mock_get):
-        """Runner should use table name from meta, not hardcode 'weather_data'."""
         mock_get.return_value        = make_mock_response(200)
         client                       = make_bq_client()
         mock_get_client.return_value = client
@@ -410,14 +461,12 @@ class TestWeatherPipeline:
     @patch('apis.weather.fetch.requests.get')
     @patch('pipeline.runner.get_bq_client')
     def test_correct_endpoint_logged_in_api_request(self, mock_get_client, mock_get):
-        """Runner should use endpoint from meta, not hardcode the weather endpoint."""
         mock_get.return_value        = make_mock_response(200)
         client                       = make_bq_client()
         mock_get_client.return_value = client
 
         run_pipeline(weather_api)
 
-        # Find the api_requests insert call and inspect the row
         for call_args in client.insert_rows_json.call_args_list:
             table, rows = call_args.args
             if 'api_requests' in table:
