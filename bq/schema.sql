@@ -55,6 +55,19 @@ CREATE TABLE IF NOT EXISTS news_data (
 );
 
 -- -------------------------------------------------------------
+-- Stock Data (Processed)
+-- Extracted fields from Alpha Vantage Global Quote
+-- -------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS stock_data (
+    id BIGINT PRIMARY KEY,
+    request_id INTEGER NOT NULL REFERENCES api_requests(id),
+    symbol VARCHAR(10) NOT NULL,
+    price FLOAT NOT NULL,
+    volume BIGINT NOT NULL,
+    latest_day DATE NOT NULL
+);
+
+-- -------------------------------------------------------------
 -- Extracted Entities
 -- Generic table for parsed entities from any API source
 -- e.g. company names, categories, dates

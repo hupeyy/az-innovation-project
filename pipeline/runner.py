@@ -2,7 +2,7 @@ import json
 import time
 from datetime import datetime, timezone
 
-from config import validate_env, OPENWEATHER_API_KEY, NEWS_API_KEY
+from config import validate_env, OPENWEATHER_API_KEY, NEWS_API_KEY, ALPHAVANTAGE_API_KEY
 from bq.client import get_bq_client, insert_rows
 from pipeline.logger import setup_logger, log_pipeline_error
 from pipeline.notifications import send_email_alert, send_pipeline_summary
@@ -14,6 +14,7 @@ logger = setup_logger('az_pipeline')
 API_KEYS = {
     'weather': OPENWEATHER_API_KEY,
     'news':    NEWS_API_KEY,
+    'alpha_vantage': ALPHAVANTAGE_API_KEY
 }
 
 def run_pipeline(api):
@@ -39,9 +40,10 @@ def run_pipeline(api):
             return
 
         # 3. Resolve the correct API key from meta
-        meta     = api.get_api_meta()
+        meta = api.get_api_meta()
         api_name = meta['api_name']
-        api_key  = API_KEYS.get(api_name)
+        print(f"DEBUG: Looking for key for '{api_name}' in keys: {list(API_KEYS.keys())}")
+        api_key = API_KEYS.get(api_name)
 
         if not api_key:
             error_msg = f'No API key found for api_name={api_name}'
@@ -53,7 +55,7 @@ def run_pipeline(api):
         response, fetch_error = api.fetch(api_key, logger)
 
         if response is None:
-            request_id = int(datetime.now(timezone.utc).timestamp())
+            request_id = int(datetime.now(timezone.utc).timestamp() * 1000000)
             log_pipeline_error(bq, logger, fetch_error, request_id, stage='fetch')
             send_email_alert(
                 f"{api_name.upper()} Fetch Failed",
