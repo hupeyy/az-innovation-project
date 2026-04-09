@@ -2,7 +2,7 @@ name: Run API Pipeline
 
 on:
   schedule:
-    - cron: '0 */1 * * *'       # every 1 hour
+    - cron: '0 */4 * * *'       # every 4 hour
   workflow_dispatch:              # allows manual trigger from GitHub UI
 
 jobs:
