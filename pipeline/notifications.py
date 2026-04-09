@@ -2,6 +2,7 @@ import smtplib
 import os
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from interface.slack.router import post_pipeline_alert
 from datetime import datetime, UTC
 
 
@@ -74,4 +75,5 @@ def send_pipeline_summary(api_name, records_loaded, errors, duration):
     Duration: {duration:.2f} seconds
     """
     
-    send_email_alert(subject, message)
+def send_slack_alert(message):
+    return post_pipeline_alert(message)

@@ -13,10 +13,10 @@ SCOPES = [
 
 def get_sheets_client():
     """Authenticate and return a gspread client."""
-    credentials_json = os.getenv('GOOGLE_CREDENTIALS_JSON')
+    credentials_json = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
 
     if not credentials_json:
-        raise EnvironmentError("GOOGLE_CREDENTIALS_JSON not set in environment")
+        raise EnvironmentError("GOOGLE_APPLICATION_CREDENTIALS not set in environment")
 
     # Handle both file path and raw JSON string
     try:

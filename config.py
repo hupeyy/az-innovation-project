@@ -18,7 +18,7 @@ GCP_PROJECT_ID = BIGQUERY_PROJECT_ID  # backwards compatibility
 DATASET_ID = os.getenv("DATASET_ID", "az_innovation_dataset")
 GOOGLE_APPLICATION_CREDENTIALS = (
     os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
-    or os.getenv("GOOGLE_CREDENTIALS_JSON")
+    or os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 )
 
 # -----------------------------------------------------------------

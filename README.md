@@ -177,7 +177,7 @@ NEWS_API_KEY=your_newsapi_key
 BIGQUERY_PROJECT_ID=your_gcp_project_id
 BIGQUERY_DATASET_ID=your_bigquery_dataset
 
-GOOGLE_CREDENTIALS_JSON=path/to/your/service_account_key.json
+GOOGLE_APPLICATION_CREDENTIALS=path/to/your/service_account_key.json
 GOOGLE_SHEETS_ID=your_google_sheet_id
 
 GMAIL_ADDRESS=your_email@gmail.com
@@ -208,6 +208,6 @@ The pipeline is automated using GitHub Actions. Add the following repository sec
 - ALPHAVANTAGE_API_KEY	
 - BIGQUERY_PROJECT_ID
 - BIGQUERY_DATASET_ID
-- GOOGLE_CREDENTIALS_JSON
+- GOOGLE_APPLICATION_CREDENTIALS
 - GOOGLE_SHEETS_ID
 - GMAIL_ADDRESS
